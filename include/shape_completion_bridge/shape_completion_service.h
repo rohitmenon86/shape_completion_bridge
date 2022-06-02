@@ -32,22 +32,33 @@ public:
 private:
     ros::NodeHandle nh_;
     ros::NodeHandle nhp_;
+    
     ros::Subscriber sub_pointcloud_;
+    ros::Publisher pub_completed_shapes_;
+
     ros::ServiceServer service_shape_completion_;
+    
+    ros::ServiceClient client_fit_superellipsoids_;
+    ros::ServiceClient client_register_shapes_;
+    ros::ServiceClient client_reconstruct_shapes_;
+    
+    
     std::unique_ptr<tf::TransformListener> listener_;
-    std_msgs::Header pc_pcl_tf_ros_header_;
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_pcl_;
+    std_msgs::Header pc_obs_pcl_tf_ros_header_;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_obs_pcl_;
+    
 
     int p_min_cluster_size_, p_max_cluster_size_;
     double p_cluster_tolerance_, p_estimate_normals_search_radius_, p_estimate_cluster_center_regularization_;
     std::string p_world_frame_;
 
-    bool getPointCloud(sensor_msgs::PointCloud2& pc_ros);
-
     bool callShapeCompletionMethod(const shape_completion_bridge_msgs::CompleteShapes::Request& req);
     bool completeShapeUsingSuperellipsoids();
     bool completeShapeUsingShapeRegistration();
     bool completeShapeUsingShapeReconstruction();
+
+    bool readPointCloudFromTopic();
+    bool createClusteredShapes();
 
     template <typename PointT>
     inline typename pcl::PointCloud<PointT>::ConstPtr removeActualPointsfromPrediction(typename pcl::PointCloud<PointT>::Ptr pc_surf_pred, typename pcl::PointCloud<PointT>::Ptr pc_surf_real)

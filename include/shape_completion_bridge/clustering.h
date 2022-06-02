@@ -60,6 +60,7 @@ public:
   void flipNormalsTowardsClusterCenter();
   pcl::PointXYZ estimateClusterCenter(float regularization);
   pcl::PointXYZ getEstimatedCenter();
+  void getEstimatedCenter(double& x, double& y, double& z);
 
   private:
   typename pcl::PointCloud<PointT>::Ptr cloud_in_;
@@ -155,6 +156,20 @@ pcl::PointXYZ ClusteredShape<PointT>::estimateClusterCenter(float regularization
     fprintf(stderr, "Center prediction with normals failed. Using cluster mean instead...\n");
   }
   return estimated_center_;
+}
+
+template <typename PointT>
+pcl::PointXYZ ClusteredShape<PointT>::getEstimatedCenter()
+{
+  return estimated_center_;
+}
+
+template <typename PointT>
+void ClusteredShape<PointT>::getEstimatedCenter(double& x, double& y, double& z)
+{
+  x = estimated_center_.x;
+  y = estimated_center_.y;
+  z = estimated_center_.z;
 }
 
 } // namespace
