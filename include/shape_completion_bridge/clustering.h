@@ -10,6 +10,7 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/segmentation/conditional_euclidean_clustering.h>
+#include <pcl/filters/extract_indices.h>
 
 #include <boost/math/special_functions/beta.hpp>
 
