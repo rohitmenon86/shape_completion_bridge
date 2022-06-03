@@ -1,24 +1,17 @@
 #include "shape_completion_bridge/shape_completion_service.h"
 #include "shape_completion_bridge_msgs/ClusteredShape.h"
 
-namespace shape_completion
+namespace shape_completion_bridge
 {
 
 ShapeCompletionService::ShapeCompletionService():nhp_("~")
 {
-    nhp_.param("p_min_cluster_size", p_min_cluster_size_, 100);
-    nhp_.param("p_max_cluster_size", p_max_cluster_size_, 10000);
-    nhp_.param("p_cluster_tolerance", p_cluster_tolerance_, 0.01);
-    nhp_.param("p_estimate_normals_search_radius", p_estimate_normals_search_radius_, 0.015);
-    nhp_.param("p_estimate_cluster_center_regularization", p_estimate_cluster_center_regularization_, 2.5);
-
+    nhp_.param("shape_completor_type", shape_completor_type_, std::string("superellipsoids"));
     pub_completed_shapes_ = nhp_.advertise<sensor_msgs::PointCloud2>("completed_shapes", 2, true);
+
+    p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
 }
 
-// ShapeCompletionService(ros::NodeHandle& nh, ros::NodeHandle& nhp):ShapeCompletionService(), nh_(nh), nhp_(nhp)
-// {
-
-// }
 
 bool ShapeCompletionService::processCompleteShapesServiceCallback(const shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
 {
@@ -28,7 +21,6 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(const shape_co
         ROS_WARN("Returning from service call");
         return false;
     }
-    callShapeCompletionMethod(req);
     
 
     return true;
@@ -62,60 +54,6 @@ bool ShapeCompletionService::readPointCloudFromTopic()
     return true;
 }
 
-bool ShapeCompletionService::createClusteredShapes()
-{
-    std::vector<pcl::PointIndices> cluster_indices;
-    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters = clustering::euclideanClusterExtraction(pc_obs_pcl_, cluster_indices, p_cluster_tolerance_, p_min_cluster_size_, p_max_cluster_size_);
-    //std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters = clustering::experimentalClustering(pc_pcl, cluster_indices);
 
-    // TODO: CHECK IF FRUIT SIZE MAKES SENSE. OTHERWISE SPLIT OR DISCARD
-
-    // Initialize superellipsoids
-    std::vector<shape_completion_bridge_msgs::ClusteredShape> clustered_shapes;
-    for (const auto& current_cluster_pc : clusters)
-    {
-        auto new_clustered_shape = std::make_shared<clustering::ClusteredShape<pcl::PointXYZRGB>>(current_cluster_pc);
-        new_clustered_shape->estimateNormals(p_estimate_normals_search_radius_); // search_radius
-        new_clustered_shape->estimateClusterCenter(p_estimate_cluster_center_regularization_); // regularization
-        shape_completion_bridge_msgs::ClusteredShape clustered_shape_msg;
-        pcl::toROSMsg(*current_cluster_pc, clustered_shape_msg.cluster_pointcloud);
-        new_clustered_shape->getEstimatedCenter(clustered_shape_msg.estimated_centre.x, clustered_shape_msg.estimated_centre.y, clustered_shape_msg.estimated_centre.z); 
-        clustered_shapes.push_back(clustered_shape_msg);
-    }
-}
-
-bool ShapeCompletionService::callShapeCompletionMethod(const shape_completion_bridge_msgs::CompleteShapes::Request& req)
-{
-    switch(req.shape_completion_method)
-    {
-        case shape_completion_bridge_msgs::CompleteShapesRequest::SUPERELLIPSOID:
-            completeShapeUsingSuperellipsoids();
-            break;
-        case shape_completion_bridge_msgs::CompleteShapesRequest::SHAPE_REGISTRATION:
-            completeShapeUsingShapeRegistration();
-            break;
-        case shape_completion_bridge_msgs::CompleteShapesRequest::SHAPE_RECONSTRUCTION:
-            completeShapeUsingShapeReconstruction();
-            break;
-        default:
-            ROS_ERROR("Invalid shape completion method");
-            return false;
-    }
-    return true;
-}
-bool ShapeCompletionService::completeShapeUsingSuperellipsoids()
-{
-    return true;
-}
-
-bool ShapeCompletionService::completeShapeUsingShapeRegistration()
-{
-    return true;
-}
-
-bool ShapeCompletionService::completeShapeUsingShapeReconstruction()
-{
-    return true;
-}
 
 }

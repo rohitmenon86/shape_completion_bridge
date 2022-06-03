@@ -17,9 +17,9 @@
 #include <shape_completion_bridge_msgs/CompleteShapes.h>
 
 #include "shape_completion_bridge/clustering.h"
+#include "shape_completion_bridge/shape_completor.h"
 
-
-namespace shape_completion
+namespace shape_completion_bridge
 {
 class ShapeCompletionService
 {
@@ -33,32 +33,21 @@ private:
     ros::NodeHandle nh_;
     ros::NodeHandle nhp_;
     
-    ros::Subscriber sub_pointcloud_;
     ros::Publisher pub_completed_shapes_;
 
     ros::ServiceServer service_shape_completion_;
-    
-    ros::ServiceClient client_fit_superellipsoids_;
-    ros::ServiceClient client_register_shapes_;
-    ros::ServiceClient client_reconstruct_shapes_;
-    
-    
+
+    std::string p_world_frame_;
     std::unique_ptr<tf::TransformListener> listener_;
     std_msgs::Header pc_obs_pcl_tf_ros_header_;
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_obs_pcl_;
-    
 
-    int p_min_cluster_size_, p_max_cluster_size_;
-    double p_cluster_tolerance_, p_estimate_normals_search_radius_, p_estimate_cluster_center_regularization_;
-    std::string p_world_frame_;
-
-    bool callShapeCompletionMethod(const shape_completion_bridge_msgs::CompleteShapes::Request& req);
-    bool completeShapeUsingSuperellipsoids();
-    bool completeShapeUsingShapeRegistration();
-    bool completeShapeUsingShapeReconstruction();
+    std::string shape_completor_type_;
+    std::unique_ptr<ShapeCompletor> p_shape_completor_;
 
     bool readPointCloudFromTopic();
-    bool createClusteredShapes();
+
+
 
     template <typename PointT>
     inline typename pcl::PointCloud<PointT>::ConstPtr removeActualPointsfromPrediction(typename pcl::PointCloud<PointT>::Ptr pc_surf_pred, typename pcl::PointCloud<PointT>::Ptr pc_surf_real)
