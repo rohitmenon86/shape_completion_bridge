@@ -14,12 +14,15 @@
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/kdtree/impl/kdtree_flann.hpp>
 #include <pcl/kdtree/io.h>
+#include <pcl/common/distances.h>
+
 #include <shape_completion_bridge_msgs/CompleteShapes.h>
 #include <shape_completion_bridge_msgs/ClusteredShape.h>
 #include <shape_completion_bridge_msgs/SuperellipsoidResult.h>
 
 #include <shape_completion_bridge_msgs/FitSuperellipsoids.h>
 #include <shape_completion_bridge_msgs/RegisterShape.h>
+#include <shape_completion_bridge_msgs/RoiData.h>
 
 
 
@@ -28,15 +31,25 @@
 
 namespace shape_completion_bridge
 {
-
 struct ShapeCompletorResult
 {
-    sensor_msgs::PointCloud2 observed_cloud;
-    sensor_msgs::PointCloud2 predicted_volume_cloud;
-    sensor_msgs::PointCloud2 predicted_surface_cloud;
-    sensor_msgs::PointCloud2 predicted_cloud_normals;
+    bool valid_prediction;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr observed_pointcloud;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr predicted_volume_cloud;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr predicted_surface_cloud;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr predicted_missing_surface_cloud;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr predicted_cloud_normals;
     geometry_msgs::Transform rigid_local_transform;
-};    
+
+    ShapeCompletorResult():valid_prediction(false), observed_pointcloud(NULL), predicted_volume_cloud(NULL),predicted_surface_cloud(NULL),predicted_missing_surface_cloud(NULL),predicted_cloud_normals(NULL)
+    {}   
+};  
+
+struct PointCloudPCLwithRoiData
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
+    std::vector<shape_completion_bridge_msgs::RoiData> roi_data;
+};
 
 class ShapeCompletor
 {
@@ -44,7 +57,8 @@ class ShapeCompletor
     ShapeCompletor(ros::NodeHandle nh, ros::NodeHandle nhp);
 
     virtual bool completeShapes(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_obs_pcl, std::string roi_name, std::vector<ShapeCompletorResult> & result) = 0;
-    
+    PointCloudPCLwithRoiData createCompleteShape(std::vector<ShapeCompletorResult>& shape_completor_result);
+
 
     protected:
     ros::NodeHandle nh_;
@@ -61,9 +75,16 @@ class ShapeCompletor
     int p_min_cluster_size_, p_max_cluster_size_;
     double p_cluster_tolerance_, p_estimate_normals_search_radius_, p_estimate_cluster_center_regularization_;
 
+    double mean_, stddev_, variance_;
+
     std::vector<shape_completion_bridge_msgs::ClusteredShape> clustered_shapes_;
 
     bool createClusteredShapes();
+
+    PointCloudPCLwithRoiData processShapeCompletorResult(const ShapeCompletorResult& shape_completor_result);
+    std::vector<shape_completion_bridge_msgs::RoiData>  calcRoiData(pcl::PointCloud<pcl::PointXYZ>::Ptr actual_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr pred_cloud);
+    double calcMinimumDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr actual_cloud, pcl::PointXYZ& point);
+    double calcRoiProbability(double dist);
 }; 
 
 class SuperellipsoidFitter: public ShapeCompletor

@@ -21,7 +21,12 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(const shape_co
         ROS_WARN("Returning from service call");
         return false;
     }
-    
+    std::vector<ShapeCompletorResult> shape_completor_result;
+    p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result);
+    auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
+
+    pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
+    res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
 
     return true;
 }
