@@ -51,6 +51,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>message_runtime</exec_depend>
   <depend>shape_completion_bridge_msgs</depend>
+  <exec_depend>capsicum_superellipsoid_detector</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

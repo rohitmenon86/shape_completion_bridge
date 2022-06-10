@@ -7,13 +7,18 @@ namespace shape_completion_bridge
 ShapeCompletionService::ShapeCompletionService():nhp_("~")
 {
     nhp_.param("shape_completor_type", shape_completor_type_, std::string("superellipsoids"));
-    pub_completed_shapes_ = nhp_.advertise<sensor_msgs::PointCloud2>("completed_shapes", 2, true);
+    nhp_.param("publish_pointclouds", publish_pointclouds_, true);
+    pub_surface_ = nhp_.advertise<sensor_msgs::PointCloud2>("surface_cloud", 2, true);
+    pub_volume_ = nhp_.advertise<sensor_msgs::PointCloud2>("volume_cloud", 2, true);
+    pub_missing_surface_ = nhp_.advertise<sensor_msgs::PointCloud2>("missing_surface_cloud", 2, true);
 
+    timer_publisher_ = nhp_.createTimer(ros::Duration(1.0), &ShapeCompletionService::timerCallback, this);
+    service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
     p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
 }
 
 
-bool ShapeCompletionService::processCompleteShapesServiceCallback(const shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
+bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
 {
     res.result_code = -1;
     if(readPointCloudFromTopic() == false)
@@ -22,13 +27,32 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(const shape_co
         return false;
     }
     std::vector<ShapeCompletorResult> shape_completor_result;
-    p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result);
-    auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
+    pc_ros_missing_surf_ = NULL;
+    if(p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result))
+    {
+        auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
 
-    pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
-    res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
+        pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
+        res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
+
+        if(publish_pointclouds_)
+        {
+            *pc_ros_missing_surf_ = res.full_predicted_point_cloud.point_cloud;
+            pc_ros_missing_surf_->header = pc_obs_pcl_tf_ros_header_;
+        }
+    }
+    else
+    {
+        ROS_WARN("Shape Completion Failure");
+    }
 
     return true;
+}
+
+void ShapeCompletionService::timerCallback(const ros::TimerEvent& event)
+{
+    if(pc_ros_missing_surf_ != NULL)
+        pub_missing_surface_.publish(pc_ros_missing_surf_);
 }
 
 bool ShapeCompletionService::readPointCloudFromTopic()

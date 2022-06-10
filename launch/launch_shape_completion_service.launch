@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <include file="$(find capsicum_superellipsoid_detector)/launch/start_service_sim.launch" />
+    <node pkg="shape_completion_bridge" type="shape_completion_node" name="shape_completion_service" output="screen">
+        <remap from="pc_in" to="/voxblox_node/surface_pointcloud"/>
+    </node>
+
+</launch>
