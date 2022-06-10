@@ -107,13 +107,13 @@ double ShapeCompletor::calcMinimumDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr a
 }
 double ShapeCompletor::calcRoiProbability(double dist)
 {
-    return exp(-0.5* (dist- mean_)*(dist- mean_)/variance_);
+    return 0.5*exp(-0.5* (dist- mean_)*(dist- mean_)/variance_);
 }
 
 SuperellipsoidFitter::SuperellipsoidFitter(ros::NodeHandle nh, ros::NodeHandle nhp):ShapeCompletor(nh, nhp)
 {
     ROS_WARN("Superellipsoid Fitter Constructor");
-    client_shape_completor_ = nh_.serviceClient<shape_completion_bridge_msgs::FitSuperellipsoids>("superellipsoid_detector");
+    client_shape_completor_ = nh_.serviceClient<shape_completion_bridge_msgs::FitSuperellipsoids>("fit_superellipsoids");
 }
 
 bool SuperellipsoidFitter::completeShapes(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_obs_pcl, std::string roi_name, std::vector<ShapeCompletorResult> & result)
