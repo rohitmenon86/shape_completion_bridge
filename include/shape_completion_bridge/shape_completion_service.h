@@ -21,6 +21,7 @@
 
 namespace shape_completion_bridge
 {
+
 class ShapeCompletionService
 {
 public:
@@ -49,9 +50,11 @@ private:
 
     std::string shape_completor_type_;
     std::unique_ptr<ShapeCompletor> p_shape_completor_;
+    uint8_t last_shape_completion_method_;
 
     bool readPointCloudFromTopic();
 
+    void selectShapeCompletionMethod(const uint8_t& shape_completion_method);
 
 
     template <typename PointT>

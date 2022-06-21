@@ -31,6 +31,14 @@
 
 namespace shape_completion_bridge
 {
+static bool abs_compare(shape_completion_bridge_msgs::RoiData a, shape_completion_bridge_msgs::RoiData b)
+{
+    return (fabs(a.roi_probability) < fabs(b.roi_probability));
+}
+static bool abs_compare_min(shape_completion_bridge_msgs::RoiData a, shape_completion_bridge_msgs::RoiData b)
+{
+    return (std::abs(a.roi_probability) > std::abs(b.roi_probability));
+}
 struct ShapeCompletorResult
 {
     bool valid_prediction;
