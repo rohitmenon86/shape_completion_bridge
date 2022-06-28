@@ -56,44 +56,6 @@ private:
 
     void selectShapeCompletionMethod(const uint8_t& shape_completion_method);
 
-
-    template <typename PointT>
-    inline typename pcl::PointCloud<PointT>::ConstPtr removeActualPointsfromPrediction(typename pcl::PointCloud<PointT>::Ptr pc_surf_pred, typename pcl::PointCloud<PointT>::Ptr pc_surf_real)
-    {
-        std::vector<int> indices_to_remove;
-        // pcl::getApproximateIndices<pcl::PointXYZ, pcl::PointXYZRGB>(pc_surf_pred, pc_surf_real, indices_to_remove);
-        
-        try 
-        {
-            pcl::search::KdTree<PointT> tree_pred; 
-            tree_pred.setInputCloud (pc_surf_pred);
-            float radius = 0.015f;
-            for (const auto &point : pc_surf_real->points)
-            {
-                PointT temp;
-                temp.x = point.x;
-                temp.y = point.y;
-                temp.z = point.z;
-                std::vector<int> point_indices;
-                std::vector<float> point_distances;
-                if(tree_pred.radiusSearch (temp, radius, point_indices, point_distances))
-                {
-                    indices_to_remove.insert(indices_to_remove.end(), point_indices.begin(), point_indices.end());
-                }
-            }
-            std::sort( indices_to_remove.begin(), indices_to_remove.end() );
-            indices_to_remove.erase( std::unique( indices_to_remove.begin(), indices_to_remove.end() ), indices_to_remove.end() );
-            ROS_WARN_STREAM("No of indices: "<<indices_to_remove.size());
-            pcl::IndicesConstPtr indices_ptr(new pcl::Indices(indices_to_remove));
-            const auto [inlier_cloud, outlier_cloud] = clustering::separateCloudByIndices<pcl::PointXYZ>(pc_surf_pred, indices_ptr); 
-            return outlier_cloud;
-        }
-        catch(const std::exception &e)
-        {
-            ROS_WARN_STREAM("removeActualPointsfromPrediction"<<e.what());
-        }
-    }
-
     
 };
 
