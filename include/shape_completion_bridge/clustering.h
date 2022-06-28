@@ -11,6 +11,9 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/segmentation/conditional_euclidean_clustering.h>
 #include <pcl/filters/extract_indices.h>
+#include<iostream>
+#include <pcl/common/centroid.h>
+#include <pcl/common/transforms.h>
 
 #include <boost/math/special_functions/beta.hpp>
 
@@ -61,9 +64,11 @@ public:
   pcl::PointXYZ estimateClusterCenter(float regularization);
   pcl::PointXYZ getEstimatedCenter();
   void getEstimatedCenter(double& x, double& y, double& z);
+  typename pcl::PointCloud<PointT>::Ptr shiftCloudOriginToEstimatedCentre();
 
   private:
   typename pcl::PointCloud<PointT>::Ptr cloud_in_;
+  typename pcl::PointCloud<PointT>::Ptr cloud_shifted_;
   pcl::PointCloud<pcl::Normal>::Ptr normals_in_;
   pcl::PointXYZ estimated_center_;
   std::shared_ptr<std::vector<double>> parameters_ptr_;
@@ -170,6 +175,82 @@ void ClusteredShape<PointT>::getEstimatedCenter(double& x, double& y, double& z)
   x = estimated_center_.x;
   y = estimated_center_.y;
   z = estimated_center_.z;
+}
+
+template <typename PointT>
+typename pcl::PointCloud<PointT>::Ptr ClusteredShape<PointT>::shiftCloudOriginToEstimatedCentre()
+{
+  Eigen::Vector4f cluster_centroid, centroid;
+  cluster_centroid(0) = estimated_center_.x;
+  cluster_centroid(1) = estimated_center_.y;
+  cluster_centroid(2) = estimated_center_.z;
+  cluster_centroid(3) = 1.0;
+  pcl::compute3DCentroid(*cloud_in_, centroid);
+  std::cout << "Centroid of Original PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+  //std::cout << "+++++++++Centroid of Original PointCloud Using Our Method: "<<cluster_centroid.transpose()<<std::endl;
+  Eigen::Matrix4f transform_mat = Eigen::Matrix4f::Identity();
+  transform_mat.col(3) = -1.0*centroid;
+  cloud_shifted_.reset(new pcl::PointCloud<PointT>);
+  pcl::transformPointCloud (*cloud_in_, *cloud_shifted_, transform_mat);  
+  pcl::compute3DCentroid(*cloud_shifted_, centroid);
+  //std::cout << "Centroid of Shifted PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+  return cloud_shifted_;
+}
+
+template <typename PointT>
+inline void shiftCloudCentroidToDesiredOrigin(typename pcl::PointCloud<PointT>::Ptr cloud, double& x, double& y, double& z)
+{
+  Eigen::Vector4f centroid, desired_origin;
+  pcl::compute3DCentroid(*cloud, centroid);
+  //std::cerr << "Centroid of Original PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+  desired_origin(0) = x;
+  desired_origin(1) = y;
+  desired_origin(2) = z;
+  desired_origin(3) = 1.0;
+  //std::cerr << "Desired origin: "<<desired_origin.transpose()<<std::endl;
+  Eigen::Matrix4f transform_mat = Eigen::Matrix4f::Identity();
+  transform_mat.col(3) = desired_origin;
+  pcl::transformPointCloud (*cloud, *cloud, transform_mat);  
+  pcl::compute3DCentroid(*cloud, centroid);
+  std::cerr << "Centroid of Shifted PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+}
+
+template <typename PointT>
+inline typename pcl::PointCloud<PointT>::Ptr removeActualPointsfromPrediction(typename pcl::PointCloud<PointT>::Ptr pc_surf_pred, typename pcl::PointCloud<PointT>::Ptr pc_surf_real)
+{
+    std::vector<int> indices_to_remove;
+    // pcl::getApproximateIndices<pcl::PointXYZ, pcl::PointXYZRGB>(pc_surf_pred, pc_surf_real, indices_to_remove);
+    std::cout<<"Before remove points";
+    try 
+    {
+        pcl::search::KdTree<PointT> tree_pred; 
+        tree_pred.setInputCloud (pc_surf_pred);
+        float radius = 0.015f;
+        for (const auto &point : pc_surf_real->points)
+        {
+            PointT temp;
+            temp.x = point.x;
+            temp.y = point.y;
+            temp.z = point.z;
+            std::vector<int> point_indices;
+            std::vector<float> point_distances;
+            if(tree_pred.radiusSearch (temp, radius, point_indices, point_distances))
+            {
+                indices_to_remove.insert(indices_to_remove.end(), point_indices.begin(), point_indices.end());
+            }
+        }
+        std::sort( indices_to_remove.begin(), indices_to_remove.end() );
+        indices_to_remove.erase( std::unique( indices_to_remove.begin(), indices_to_remove.end() ), indices_to_remove.end() );
+        std::cout<<"No of indices: "<<indices_to_remove.size();
+        pcl::IndicesConstPtr indices_ptr(new pcl::Indices(indices_to_remove));
+        const auto [inlier_cloud, outlier_cloud] = clustering::separateCloudByIndices<pcl::PointXYZ>(pc_surf_pred, indices_ptr); 
+        return outlier_cloud;
+    }
+    catch(const std::exception &e)
+    {
+        std::cerr<<"removeActualPointsfromPrediction"<<e.what();
+        return NULL;
+    }
 }
 
 } // namespace
