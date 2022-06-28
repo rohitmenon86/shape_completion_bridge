@@ -41,6 +41,7 @@ void ShapeCompletionService::selectShapeCompletionMethod(const uint8_t& shape_co
 
 bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
 {
+    ROS_WARN("processCompleteShapesServiceCallback");
     res.result_code = -1;
     if(readPointCloudFromTopic() == false)
     {
