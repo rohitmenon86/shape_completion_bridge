@@ -186,7 +186,7 @@ typename pcl::PointCloud<PointT>::Ptr ClusteredShape<PointT>::shiftCloudOriginTo
   cluster_centroid(2) = estimated_center_.z;
   cluster_centroid(3) = 1.0;
   pcl::compute3DCentroid(*cloud_in_, centroid);
-  std::cout << "Centroid of Original PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+  //std::cout << "Centroid of Original PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
   //std::cout << "+++++++++Centroid of Original PointCloud Using Our Method: "<<cluster_centroid.transpose()<<std::endl;
   Eigen::Matrix4f transform_mat = Eigen::Matrix4f::Identity();
   transform_mat.col(3) = -1.0*centroid;
@@ -212,7 +212,7 @@ inline void shiftCloudCentroidToDesiredOrigin(typename pcl::PointCloud<PointT>::
   transform_mat.col(3) = desired_origin;
   pcl::transformPointCloud (*cloud, *cloud, transform_mat);  
   pcl::compute3DCentroid(*cloud, centroid);
-  std::cerr << "Centroid of Shifted PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
+  //std::cerr << "Centroid of Shifted PointCloud Using compute3DCentroid: "<<centroid.transpose()<<std::endl;
 }
 
 template <typename PointT>

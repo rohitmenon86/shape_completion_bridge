@@ -35,6 +35,11 @@ bool ShapeCompletor::createClusteredShapes(bool shift_origin)
     clustered_shapes_.clear();
     for (const auto& current_cluster_pc : clusters)
     {
+        if(current_cluster_pc->points.size() > 800)
+        {
+            ROS_WARN("Fruit cluster almost complete. Hence discarding");
+            continue;
+        }
         auto new_clustered_shape = std::make_shared<clustering::ClusteredShape<pcl::PointXYZRGB>>(current_cluster_pc);
         new_clustered_shape->estimateNormals(p_estimate_normals_search_radius_); // search_radius
         new_clustered_shape->estimateClusterCenter(p_estimate_cluster_center_regularization_); // regularization
@@ -46,10 +51,10 @@ bool ShapeCompletor::createClusteredShapes(bool shift_origin)
         if(activate_downsampling_)
         {
             size_t cloud_size = cloud_final->width * cloud_final->height; 
-            if(cloud_size > 300)
+            if(cloud_size > 200)
             {
                 float voxel_size = 0.005f;
-                if(cloud_size > 4000)
+                if(cloud_size > 400)
                     voxel_size = 0.01f;
                 // Create the filtering object
                 ROS_INFO_STREAM("Cloud Size before downsampling: "<<cloud_final->width * cloud_final->height );
@@ -142,10 +147,10 @@ PointCloudPCLwithRoiData ShapeCompletor::processMissingPredictionCloud(pcl::Poin
     result.cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
     result.cloud = predicted_missing_surface_cloud;   
     double ratio = double(result.cloud->points.size())/double(observed_pointcloud->points.size());
-    ROS_INFO_STREAM("obs_cloud  size: "<<observed_pointcloud->points.size()<< "\tpred_cloud size: "<<result.cloud->points.size()<< "\t\t ratio of pred to actual: "<<ratio);
+    ROS_DEBUG_STREAM("obs_cloud  size: "<<observed_pointcloud->points.size()<< "\tpred_cloud size: "<<result.cloud->points.size()<< "\t\t ratio of pred to actual: "<<ratio);
     if((getShapeCompletionType() == 0 && (result.cloud->points.size() < 10 || ratio < 0.1)) || (getShapeCompletionType() == 1 && result.cloud->points.size() < 10))
     {
-        ROS_ERROR("Discarding this cloud due to few points");
+        ROS_WARN("Discarding this cloud due to few points");
         result.cloud = NULL;
         return result;
     }
@@ -344,7 +349,7 @@ void ShapeRegister::fromShapeRegistrationResult2ShapeCompletorResult(const shape
     eigen_transform.pretranslate(orignal_centroid);
     eigen_transform.pretranslate(local_eigen_transform.translation());
     //eigen_transform.rotate(local_eigen_transform.rotation());
-    ROS_WARN_STREAM("Original cluster centre: "<<orignal_centroid.transpose()<<"\t Desired local transform: "<<src.rigid_local_transform<<"\t New transform: "<<eigen_transform.translation());
+    ROS_DEBUG_STREAM("Original cluster centre: "<<orignal_centroid.transpose()<<"\t Desired local transform: "<<src.rigid_local_transform<<"\t New transform: "<<eigen_transform.translation());
 
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), local_eigen_transform.inverse());
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), eigen_transform);
