@@ -16,6 +16,8 @@ ShapeCompletor::ShapeCompletor(ros::NodeHandle nh, ros::NodeHandle nhp):nh_(nh),
     nhp_.param("p_estimate_cluster_center_regularization", p_estimate_cluster_center_regularization_, 2.5);
     nhp_.param("p_mean", mean_, 0.03);
     nhp_.param("p_stddev", stddev_, 0.005);
+    nhp_.param("p_roi_prob_min", roi_prob_min_, 0.5);
+    nhp_.param("p_roi_prob_max", roi_prob_max_, 0.75);
     variance_ = stddev_ * stddev_;
 }
 
@@ -104,6 +106,7 @@ PointCloudPCLwithRoiData ShapeCompletor::createCompleteShape(std::vector<ShapeCo
                     ROS_DEBUG("done merging");
                 }
             }
+
             if(merged_pred_pc_with_roi.cloud != NULL)
             {
                 merged_pc_initialised = true;
@@ -204,11 +207,67 @@ double ShapeCompletor::calcMinimumDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr a
 }
 double ShapeCompletor::calcRoiProbability(double dist)
 {
-    double prob = fmin(0.5+ 0.5*exp(-0.5* fabs((dist- mean_)*(dist- mean_)/variance_)), 0.75);
+    double prob = fmin(roi_prob_min_ + 0.5*exp(-0.5* fabs((dist- mean_)*(dist- mean_)/variance_)), roi_prob_max_);
     //ROS_INFO_STREAM("dist: "<<dist<<"\t prob: "<<prob);
     return prob;
 
 }
+
+geometry_msgs::Point ShapeCompletor::calcIndividualSimpleClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi)
+{
+    Eigen::Vector4f centroid;
+    pcl::compute3DCentroid(*cloud_with_roi.cloud, centroid);
+
+    geometry_msgs::Point cluster_centre; 
+    cluster_centre.x = centroid(1);
+    cluster_centre.y = centroid(2);
+    cluster_centre.z = centroid(3);
+
+    return cluster_centre;
+}
+
+geometry_msgs::Point ShapeCompletor::calcIndividualRoiProbWeightedClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi)
+{
+    geometry_msgs::Point cluster_centre; 
+    return cluster_centre;
+}
+
+std::vector<geometry_msgs::Point> ShapeCompletor::calcReclusteredSimpleClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi)
+{
+    std::vector<pcl::PointIndices> cluster_indices_out;
+    float cluster_tolerance = 0.02;
+    int min_cluster_size = 10; 
+    int max_cluster_size = 800;
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>  missing_surface_reclusters = clustering::euclideanClusterExtraction(cloud_with_roi.cloud, cluster_indices_out, cluster_tolerance, min_cluster_size, max_cluster_size);
+
+    std::vector<geometry_msgs::Point> cluster_centres;
+    for(const auto& cluster: missing_surface_reclusters)
+    {
+        Eigen::Vector4f centroid;
+        pcl::compute3DCentroid(*cluster, centroid);
+        geometry_msgs::Point cluster_centre; 
+        cluster_centre.x = centroid(1);
+        cluster_centre.y = centroid(2);
+        cluster_centre.z = centroid(3);
+        cluster_centres.push_back(cluster_centre);
+    }
+    return cluster_centres;
+
+}
+
+std::vector<geometry_msgs::Point> ShapeCompletor::calcReclusteredRoiProbWeightedClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi)
+{
+    std::vector<pcl::PointIndices> cluster_indices_out;
+    float cluster_tolerance = 0.02;
+    int min_cluster_size = 10; 
+    int max_cluster_size = 800;
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>  missing_surface_reclusters = clustering::euclideanClusterExtraction(cloud_with_roi.cloud, cluster_indices_out, cluster_tolerance, min_cluster_size, max_cluster_size);
+
+
+    std::vector<geometry_msgs::Point> cluster_centres;
+    return cluster_centres;
+}
+
 
 SuperellipsoidFitter::SuperellipsoidFitter(ros::NodeHandle nh, ros::NodeHandle nhp):ShapeCompletor(nh, nhp)
 {
@@ -266,6 +325,9 @@ void SuperellipsoidFitter::fromSuperelipsoidResult2ShapeCompletorResult(std::vec
             pcl::fromROSMsg(src_element.surface_pointcloud, *(res_element.predicted_surface_cloud));
             pcl::fromROSMsg(src_element.missing_surface_pointcloud, *(res_element.predicted_missing_surface_cloud));
             pcl::fromROSMsg(src_element.normals, *(res_element.predicted_cloud_normals));
+
+            res_element.cluster_centre = src_element.optimised_centre;
+
             dest.push_back(res_element);
         }
     }    
@@ -350,6 +412,11 @@ void ShapeRegister::fromShapeRegistrationResult2ShapeCompletorResult(const shape
     eigen_transform.pretranslate(local_eigen_transform.translation());
     //eigen_transform.rotate(local_eigen_transform.rotation());
     ROS_DEBUG_STREAM("Original cluster centre: "<<orignal_centroid.transpose()<<"\t Desired local transform: "<<src.rigid_local_transform<<"\t New transform: "<<eigen_transform.translation());
+
+    dest.cluster_centre.x = eigen_transform.translation().x();
+    dest.cluster_centre.y = eigen_transform.translation().y();
+    dest.cluster_centre.z = eigen_transform.translation().z();
+
 
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), local_eigen_transform.inverse());
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), eigen_transform);

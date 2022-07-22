@@ -27,6 +27,8 @@ namespace clustering
 std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> 
 euclideanClusterExtraction(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in, std::vector<pcl::PointIndices> &cluster_indices_out, float cluster_tolerance, int min_cluster_size, int max_cluster_size);
 
+std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> 
+euclideanClusterExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, std::vector<pcl::PointIndices> &cluster_indices_out, float cluster_tolerance, int min_cluster_size, int max_cluster_size);
 /*
 std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>
 experimentalClustering(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in, std::vector<pcl::PointIndices> &cluster_indices_out);

@@ -34,6 +34,40 @@ euclideanClusterExtraction(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in, std:
   return all_clusters;
 }
 
+std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> 
+euclideanClusterExtraction(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in, std::vector<pcl::PointIndices> &cluster_indices_out, float cluster_tolerance, int min_cluster_size, int max_cluster_size)
+{
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+  tree->setInputCloud (cloud_in);
+  pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+  ec.setClusterTolerance (cluster_tolerance); // 0.02
+  ec.setMinClusterSize (min_cluster_size); // 50
+  ec.setMaxClusterSize (max_cluster_size); // 10000
+  ec.setSearchMethod (tree);
+  ec.setInputCloud (cloud_in);
+  cluster_indices_out.reserve(64);
+  ec.extract (cluster_indices_out);
+
+  std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> all_clusters;
+  all_clusters.reserve(cluster_indices_out.size());
+
+  for (const auto& i_segment : cluster_indices_out)
+  {
+    // Gather points for a segment
+    pcl::PointCloud<pcl::PointXYZ>::Ptr current_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+    current_cluster->reserve(i_segment.indices.size());
+    for (const auto& i_point : (i_segment.indices))
+    {
+      current_cluster->push_back(cloud_in->at(i_point));
+    }
+    all_clusters.push_back(current_cluster);
+  }
+
+  return all_clusters;
+}
+
+
+
 /*
 std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>
 experimentalClustering(pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_in, std::vector<pcl::PointIndices> &cluster_indices_out)
