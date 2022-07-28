@@ -7,4 +7,7 @@
       <node pkg="capsicum_superellipsoid_detector" type="fit_superellipsoids_service_node" name="capsicum_superellipsoid_fitter_server" output="screen" respawn="true">
     </node>
 
+<include file="$(find capsicum_superellipsoid_detector)/launch/start_service_real.launch">
+</include>
+
 </launch>
