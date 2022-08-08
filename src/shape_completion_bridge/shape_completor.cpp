@@ -113,6 +113,9 @@ PointCloudPCLwithRoiData ShapeCompletor::createCompleteShape(std::vector<ShapeCo
             }
         }
     }
+    auto cluster_centres = calcReclusteredSimpleClusterMean(merged_pred_pc_with_roi);
+    merged_pred_pc_with_roi.cluster_centres.clear();
+    merged_pred_pc_with_roi.cluster_centres.insert(merged_pred_pc_with_roi.cluster_centres.begin(), cluster_centres.begin(), cluster_centres.end());
     return merged_pred_pc_with_roi;
 
 }
@@ -219,9 +222,9 @@ geometry_msgs::Point ShapeCompletor::calcIndividualSimpleClusterMean(const Point
     pcl::compute3DCentroid(*cloud_with_roi.cloud, centroid);
 
     geometry_msgs::Point cluster_centre; 
-    cluster_centre.x = centroid(1);
-    cluster_centre.y = centroid(2);
-    cluster_centre.z = centroid(3);
+    cluster_centre.x = centroid(0);
+    cluster_centre.y = centroid(1);
+    cluster_centre.z = centroid(2);
 
     return cluster_centre;
 }
@@ -236,7 +239,7 @@ std::vector<geometry_msgs::Point> ShapeCompletor::calcReclusteredSimpleClusterMe
 {
     std::vector<pcl::PointIndices> cluster_indices_out;
     float cluster_tolerance = 0.02;
-    int min_cluster_size = 10; 
+    int min_cluster_size = 11; 
     int max_cluster_size = 800;
     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>  missing_surface_reclusters = clustering::euclideanClusterExtraction(cloud_with_roi.cloud, cluster_indices_out, cluster_tolerance, min_cluster_size, max_cluster_size);
 
@@ -246,9 +249,9 @@ std::vector<geometry_msgs::Point> ShapeCompletor::calcReclusteredSimpleClusterMe
         Eigen::Vector4f centroid;
         pcl::compute3DCentroid(*cluster, centroid);
         geometry_msgs::Point cluster_centre; 
-        cluster_centre.x = centroid(1);
-        cluster_centre.y = centroid(2);
-        cluster_centre.z = centroid(3);
+        cluster_centre.x = centroid(0);
+        cluster_centre.y = centroid(1);
+        cluster_centre.z = centroid(2);
         cluster_centres.push_back(cluster_centre);
     }
     return cluster_centres;

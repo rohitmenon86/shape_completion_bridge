@@ -59,6 +59,8 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completi
 
         pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
         res.full_predicted_point_cloud.point_cloud.header = pc_obs_pcl_tf_ros_header_;
+        res.missing_surface_cluster_centres = merged_pred_pc_with_roi.cluster_centres;
+        
         ROS_WARN("After toROSMsg");
         res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
 

@@ -67,6 +67,7 @@ struct PointCloudPCLwithRoiData
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
     std::vector<shape_completion_bridge_msgs::RoiData> roi_data;
+    std::vector<geometry_msgs::Point> cluster_centres;
 };
 
 class ShapeCompletor
@@ -112,6 +113,8 @@ class ShapeCompletor
     std::vector<shape_completion_bridge_msgs::RoiData>  calcRoiData(pcl::PointCloud<pcl::PointXYZ>::Ptr actual_cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr pred_cloud);
     double calcMinimumDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr actual_cloud, pcl::PointXYZ& point);
     double calcRoiProbability(double dist);
+
+    //inline void setPredictionClusterType()
 
     std::vector<geometry_msgs::Point> calcMissingSurfaceClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi, MissingSurfaceClusterCentreType clustering_type);
     geometry_msgs::Point calcIndividualSimpleClusterMean(const PointCloudPCLwithRoiData& cloud_with_roi);
