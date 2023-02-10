@@ -1,5 +1,9 @@
 #include "shape_completion_bridge/shape_completion_service.h"
 #include "shape_completion_bridge_msgs/ClusteredShape.h"
+#include <mutex>          // std::mutex
+#include <superellipsoid_msgs/SuperellipsoidArray.h>
+
+std::mutex mtx;           // mutex for critical section
 
 namespace shape_completion_bridge
 {
@@ -11,11 +15,34 @@ ShapeCompletionService::ShapeCompletionService():nhp_("~")
     pub_surface_ = nhp_.advertise<sensor_msgs::PointCloud2>("surface_cloud", 2, true);
     pub_volume_ = nhp_.advertise<sensor_msgs::PointCloud2>("volume_cloud", 2, true);
     pub_missing_surface_ = nhp_.advertise<sensor_msgs::PointCloud2>("missing_surface_cloud", 2, true);
+    pub_superellipsoids_ = nhp_.advertise<superellipsoid_msgs::SuperellipsoidArray>("superellipsoids", 2, true);
 
     timer_publisher_ = nhp_.createTimer(ros::Duration(1.0), &ShapeCompletionService::timerCallback, this);
+    timer_sefitter_ = nhp_.createTimer(ros::Duration(5.0), &ShapeCompletionService::timerSuperellipsoidFitterCallback, this);
+
     service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
+    //service_shape_evaluation_ = nhp_.advertiseService("shape_evaluation_service", &ShapeCompletionService::processEvaluateShapesServiceCallback, this);
+
     last_shape_completion_method_ = 0;
     p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
+    shape_completor_result_available_ = false;
+
+    nhp_.param("p_cost_type", p_cost_type, (int)superellipsoid_volume::CostFunctionType::RADIAL_EUCLIDIAN_DISTANCE);
+    nhp_.param("p_min_cluster_size", p_min_cluster_size, 100);
+    nhp_.param("p_max_cluster_size", p_max_cluster_size, 10000);
+    nhp_.param("p_max_num_iterations", p_max_num_iterations, 100);
+    nhp_.param("p_missing_surfaces_num_samples", p_missing_surfaces_num_samples, 500);
+    nhp_.param("p_missing_surfaces_threshold", p_missing_surfaces_threshold, 0.015);
+    nhp_.param("p_cluster_tolerance", p_cluster_tolerance, 0.01);
+    nhp_.param("p_estimate_normals_search_radius", p_estimate_normals_search_radius, 0.015);
+    nhp_.param("p_estimate_cluster_center_regularization", p_estimate_cluster_center_regularization, 2.5);
+    nhp_.param("p_pointcloud_volume_resolution", p_pointcloud_volume_resolution, 0.001);
+    nhp_.param("p_octree_volume_resolution", p_octree_volume_resolution, 0.001);
+    nhp_.param("p_prior_scaling", p_prior_scaling, 0.1);
+    nhp_.param("p_prior_center", p_prior_center, 0.1);
+    nhp_.param("p_print_ceres_summary", p_print_ceres_summary, false);
+    nhp_.param("p_use_fibonacci_sphere_projection_sampling", p_use_fibonacci_sphere_projection_sampling, false);
+    nhp_.param<std::string>("p_world_frame", p_world_frame, "world");
 }
 
 void ShapeCompletionService::selectShapeCompletionMethod(const uint8_t& shape_completion_method)
@@ -51,12 +78,18 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completi
     selectShapeCompletionMethod(req.shape_completion_method);
     std::vector<ShapeCompletorResult> shape_completor_result;
     pc_ros_missing_surf_ = NULL;
+    shape_completor_result_available_ = false;
     if(p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result))
     {
+        storeShapeCompletorResult(shape_completor_result);
         ROS_WARN("Before createCompleteShape");
         auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
         ROS_WARN("After createCompleteShape");
-
+        if(merged_pred_pc_with_roi.cloud->points.size() < 1)
+        {
+            ROS_WARN("Merged Predicted Missing PC has no points");
+            return true; 
+        }
         pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
         res.full_predicted_point_cloud.point_cloud.header = pc_obs_pcl_tf_ros_header_;
         res.missing_surface_cluster_centres = merged_pred_pc_with_roi.cluster_centres;
@@ -87,6 +120,24 @@ bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completi
     }
     return true;
 
+}
+
+void ShapeCompletionService::storeShapeCompletorResult(std::vector<ShapeCompletorResult>& src)
+{
+    mtx.lock();
+    shape_completor_result_.clear();
+    shape_completor_result_ = src;
+    shape_completor_result_available_ = true;
+    mtx.unlock();
+}
+
+std::vector<ShapeCompletorResult> ShapeCompletionService::getShapeCompletorResult()
+{
+    mtx.lock();
+    std::vector<ShapeCompletorResult> res = shape_completor_result_;
+    //shape_completor_result_.clear();
+    mtx.unlock();
+    return res;
 }
 
 void ShapeCompletionService::timerCallback(const ros::TimerEvent& event)
@@ -122,6 +173,55 @@ bool ShapeCompletionService::readPointCloudFromTopic()
     
     return true;
 }
+
+
+void ShapeCompletionService::timerSuperellipsoidFitterCallback(const ros::TimerEvent& event)
+{
+    if(shape_completor_result_available_ == false)
+    {
+        ROS_ERROR("Shape Completor Result not available yet. Hence cannot evaluate shapes");
+        return; 
+    }
+    auto sc_result_vec = getShapeCompletorResult();
+    std::vector<std::shared_ptr<superellipsoid_volume::Superellipsoid<pcl::PointXYZ>>> superellipsoids;
+    superellipsoid_msgs::SuperellipsoidArray sea;
+    for(const auto& sc_result: sc_result_vec)
+    {
+        ROS_WARN_STREAM("Before make SE, point size: "<<sc_result.predicted_surface_cloud->points.size());
+        auto new_superellipsoid = std::make_shared<superellipsoid_volume::Superellipsoid<pcl::PointXYZ>>(sc_result.predicted_surface_cloud);
+        ROS_WARN("Before estimateNormals");
+        new_superellipsoid->estimateNormals(p_estimate_normals_search_radius); // search_radius
+        ROS_WARN("Before estimateClusterCenter");
+        new_superellipsoid->estimateClusterCenter(p_estimate_cluster_center_regularization); // regularization
+        ROS_WARN("Before flipNormalsTowardsClusterCenter");
+        new_superellipsoid->flipNormalsTowardsClusterCenter();
+        superellipsoids.push_back(new_superellipsoid);
+        ROS_WARN("\t***********Before fit***********************");
+        bool success = new_superellipsoid->fit(p_print_ceres_summary, p_max_num_iterations, (superellipsoid_volume::CostFunctionType)(p_cost_type));
+
+        if (success && pub_superellipsoids_.getNumSubscribers() > 0)
+        {
+            sea.header = pc_obs_pcl_tf_ros_header_;
+            superellipsoid_msgs::Superellipsoid se_msg = new_superellipsoid->generateRosMessage();
+            se_msg.header = pc_obs_pcl_tf_ros_header_;
+            sea.superellipsoids.push_back(se_msg);
+        }
+    }
+    ROS_INFO_STREAM("\t***********Cluster Fitting Publishing ***********************");
+    pub_superellipsoids_.publish(sea);
+}
+
+// bool ShapeCompletionService::processEvaluateShapesServiceCallback(shape_completion_bridge_msgs::EvaluateShapes::Request& req, shape_completion_bridge_msgs::EvaluateShapes::Response& res)
+// {
+//     if(shape_completor_result_available_ == false)
+//     {
+//         ROS_ERROR("Shape Completor Result not available yet. Hence cannot evaluate shapes");
+//         return false; 
+//     }
+
+
+
+// }
 
 
 

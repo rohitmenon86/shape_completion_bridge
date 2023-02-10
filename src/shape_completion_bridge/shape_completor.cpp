@@ -30,6 +30,65 @@ bool ShapeCompletor::createClusteredShapes(bool shift_origin)
     if(clusters.size() < 1)
         return false;
     // TODO: CHECK IF FRUIT SIZE MAKES SENSE. OTHERWISE SPLIT OR DISCARD
+    ROS_INFO_STREAM("Total number of clusters before split check: "<<clusters.size()); 
+    for(unsigned i = 0; i < clusters.size(); ++i)
+    {
+        auto current_cluster_pc = clusters.at(i);
+        pcl::PointXYZRGB min_pt, max_pt;
+        pcl::getMinMax3D(*current_cluster_pc, min_pt, max_pt);
+        double dist_x, dist_y, dist_z;
+        dist_x = fabs(max_pt.x - min_pt.x);
+        dist_y = fabs(max_pt.y - min_pt.y);
+        dist_z = fabs(max_pt.z - min_pt.z);
+
+        ROS_INFO_STREAM("Cluster "<<i<<" x_dim: "<<dist_x<<" y_dim: "<<dist_y<<""<<" z_dim: "<<dist_z);
+
+        /*if(dist_x > 0.09 || dist_y > 0.09 || dist_z > 0.11)
+        {
+            ROS_WARN_STREAM("Cluster dimensions too large. Num of points in original cluster: "<<current_cluster_pc->points.size());
+            clusters.erase(clusters.begin()+i);
+            ROS_INFO_STREAM("Total number of clusters after erase: "<<clusters.size()); 
+            size_t num_points = current_cluster_pc->points.size(); 
+            auto cluster_max = 3*num_points/4;
+            auto cluster_min = p_min_cluster_size_; 
+            cluster_min = cluster_max/4; 
+            std::vector<pcl::PointIndices> split_cluster_indices;
+            std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> split_clusters = clustering::euclideanClusterExtraction(current_cluster_pc, split_cluster_indices, p_cluster_tolerance_/2, cluster_min, cluster_max);
+            
+            for(unsigned k = 0; k < split_clusters.size(); ++k)
+            {
+                auto split_current_cluster_pc = split_clusters.at(k);
+                pcl::PointXYZRGB split_min_pt, split_max_pt;
+                pcl::getMinMax3D(*split_current_cluster_pc, split_min_pt, split_max_pt);
+                double split_dist_x, split_dist_y, split_dist_z;
+                split_dist_x = fabs(split_max_pt.x - split_min_pt.x);
+                split_dist_y = fabs(split_max_pt.y - split_min_pt.y);
+                split_dist_z = fabs(split_max_pt.z - split_min_pt.z);
+                if(split_dist_x > 0.09 || split_dist_y > 0.09 || split_dist_z > 0.11)
+                {
+                    split_clusters.erase(split_clusters.begin()+k);
+                }           
+            }
+            if(split_clusters.size() < 1)
+            {
+                continue;
+            }
+            else if(split_clusters.size() == 1)
+            {
+                auto cl = split_clusters.at(0);
+                clusters.push_back(cl); 
+            }
+            else if(split_clusters.size() > 1)
+            {
+                std::sort(split_clusters.begin(), split_clusters.end(), [](pcl::PointCloud<pcl::PointXYZRGB>::Ptr a , pcl::PointCloud<pcl::PointXYZRGB>::Ptr b) {
+                    return a->points.size() > b->points.size();
+                });
+
+                clusters.insert(clusters.end(), split_clusters.begin(), split_clusters.begin() + 1);
+            }            
+        }*/
+    }
+    ROS_INFO_STREAM("Total number of clusters after splitting: "<<clusters.size()); 
 
     std_msgs::Header pc_obs_pcl_tf_ros_header = pcl_conversions::fromPCL(pc_obs_pcl_->header);
 
@@ -37,11 +96,12 @@ bool ShapeCompletor::createClusteredShapes(bool shift_origin)
     clustered_shapes_.clear();
     for (const auto& current_cluster_pc : clusters)
     {
-        if(current_cluster_pc->points.size() > 800)
-        {
-            ROS_WARN("Fruit cluster almost complete. Hence discarding");
-            continue;
-        }
+        
+        // if(current_cluster_pc->points.size() > 800)
+        // {
+        //     ROS_WARN("Fruit cluster almost complete. Hence discarding");
+        //     continue;
+        // }
         auto new_clustered_shape = std::make_shared<clustering::ClusteredShape<pcl::PointXYZRGB>>(current_cluster_pc);
         new_clustered_shape->estimateNormals(p_estimate_normals_search_radius_); // search_radius
         new_clustered_shape->estimateClusterCenter(p_estimate_cluster_center_regularization_); // regularization
@@ -396,7 +456,9 @@ void ShapeRegister::fromShapeRegistrationResult2ShapeCompletorResult(const shape
     ROS_DEBUG("fromShapeRegistrationResult2ShapeCompletorResult, Before");
     dest.valid_prediction = true;
     dest.predicted_volume_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+    dest.predicted_surface_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
     dest.observed_pointcloud.reset(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::fromROSMsg(src.predicted_pointcloud, *(dest.predicted_surface_cloud));
     pcl::fromROSMsg(src.predicted_pointcloud, *(dest.predicted_volume_cloud));
     pcl::fromROSMsg(src.observed_pointcloud, *(dest.observed_pointcloud));
     auto x = src.cluster_centre.x;
@@ -423,6 +485,9 @@ void ShapeRegister::fromShapeRegistrationResult2ShapeCompletorResult(const shape
 
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), local_eigen_transform.inverse());
     pcl::transformPointCloud (*(dest.predicted_volume_cloud), *(dest.predicted_volume_cloud), eigen_transform);
+
+    pcl::transformPointCloud (*(dest.predicted_surface_cloud), *(dest.predicted_surface_cloud), local_eigen_transform.inverse());
+    pcl::transformPointCloud (*(dest.predicted_surface_cloud), *(dest.predicted_surface_cloud), eigen_transform);
     //clustering::shiftCloudCentroidToDesiredOrigin<pcl::PointXYZ>(dest.predicted_volume_cloud, x, y, z);
     ROS_DEBUG("fromShapeRegistrationResult2ShapeCompletorResult, After");
 }

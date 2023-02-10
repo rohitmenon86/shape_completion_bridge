@@ -22,12 +22,14 @@ find_package(catkin REQUIRED
     visualization_msgs
     octomap_ros
     octomap_msgs
+    superellipsoid_msgs
 )
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(octomap REQUIRED)
 find_package(PCL REQUIRED)
+find_package(Ceres REQUIRED)
 
 
 add_definitions(${PCL_DEFINITIONS})
@@ -64,6 +66,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${OCTOMAP_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
+  ${CERES_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -79,6 +82,7 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EX
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  ${CERES_LIBRARIES}
 )
 
 add_executable(shape_completion_node nodes/shape_completion_service_node.cpp src/shape_completion_bridge/shape_completion_service.cpp
