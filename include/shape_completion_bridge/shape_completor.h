@@ -63,6 +63,13 @@ struct ShapeCompletorResult
     {}   
 };  
 
+struct ObservedShape
+{
+    size_t instance_id;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr observed_pointcloud;
+    geometry_msgs::Point observed_cloud_centre;
+};
+
 struct PointCloudPCLwithRoiData
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud;
@@ -76,6 +83,7 @@ class ShapeCompletor
     ShapeCompletor(ros::NodeHandle nh, ros::NodeHandle nhp);
 
     virtual bool completeShapes(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_obs_pcl, std::string roi_name, std::vector<ShapeCompletorResult> & result) = 0;
+    bool getActivePredictedShapes();
     PointCloudPCLwithRoiData createCompleteShape(std::vector<ShapeCompletorResult>& shape_completor_result);
 
 

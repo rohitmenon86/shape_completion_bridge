@@ -20,8 +20,9 @@ ShapeCompletionService::ShapeCompletionService():nhp_("~")
     timer_publisher_ = nhp_.createTimer(ros::Duration(1.0), &ShapeCompletionService::timerCallback, this);
     timer_sefitter_ = nhp_.createTimer(ros::Duration(5.0), &ShapeCompletionService::timerSuperellipsoidFitterCallback, this);
 
-    service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
+    //service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
     //service_shape_evaluation_ = nhp_.advertiseService("shape_evaluation_service", &ShapeCompletionService::processEvaluateShapesServiceCallback, this);
+    service_get_active_predicted_shapes_ = nhp_.advertiseService("get_active_predicted_shapes", &ShapeCompletionService::processGetActivePredictedShapesServiceCallback, this);
 
     last_shape_completion_method_ = 0;
     p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
@@ -66,61 +67,61 @@ void ShapeCompletionService::selectShapeCompletionMethod(const uint8_t& shape_co
 
 }
 
-bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
-{
-    ROS_WARN("processCompleteShapesServiceCallback");
-    res.result_code = -1;
-    if(readPointCloudFromTopic() == false)
-    {
-        ROS_WARN("Returning from service call");
-        return false;
-    }
-    selectShapeCompletionMethod(req.shape_completion_method);
-    std::vector<ShapeCompletorResult> shape_completor_result;
-    pc_ros_missing_surf_ = NULL;
-    shape_completor_result_available_ = false;
-    if(p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result))
-    {
-        storeShapeCompletorResult(shape_completor_result);
-        ROS_WARN("Before createCompleteShape");
-        auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
-        ROS_WARN("After createCompleteShape");
-        if(merged_pred_pc_with_roi.cloud->points.size() < 1)
-        {
-            ROS_WARN("Merged Predicted Missing PC has no points");
-            return true; 
-        }
-        pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
-        res.full_predicted_point_cloud.point_cloud.header = pc_obs_pcl_tf_ros_header_;
-        res.missing_surface_cluster_centres = merged_pred_pc_with_roi.cluster_centres;
+// bool ShapeCompletionService::processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res)
+// {
+//     ROS_WARN("processCompleteShapesServiceCallback");
+//     res.result_code = -1;
+//     if(readPointCloudFromTopic() == false)
+//     {
+//         ROS_WARN("Returning from service call");
+//         return false;
+//     }
+//     selectShapeCompletionMethod(req.shape_completion_method);
+//     std::vector<ShapeCompletorResult> shape_completor_result;
+//     pc_ros_missing_surf_ = NULL;
+//     shape_completor_result_available_ = false;
+//     if(p_shape_completor_ ->completeShapes(pc_obs_pcl_, "", shape_completor_result))
+//     {
+//         storeShapeCompletorResult(shape_completor_result);
+//         ROS_WARN("Before createCompleteShape");
+//         auto merged_pred_pc_with_roi = p_shape_completor_->createCompleteShape(shape_completor_result);
+//         ROS_WARN("After createCompleteShape");
+//         if(merged_pred_pc_with_roi.cloud->points.size() < 1)
+//         {
+//             ROS_WARN("Merged Predicted Missing PC has no points");
+//             return true; 
+//         }
+//         pcl::toROSMsg(*(merged_pred_pc_with_roi.cloud), res.full_predicted_point_cloud.point_cloud);
+//         res.full_predicted_point_cloud.point_cloud.header = pc_obs_pcl_tf_ros_header_;
+//         res.missing_surface_cluster_centres = merged_pred_pc_with_roi.cluster_centres;
         
-        ROS_WARN("After toROSMsg");
-        res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
+//         ROS_WARN("After toROSMsg");
+//         res.full_predicted_point_cloud.roi_data = merged_pred_pc_with_roi.roi_data;
 
-        ROS_WARN_STREAM("Merged Predicted pointcloud size: "<<res.full_predicted_point_cloud.point_cloud.data.size());
-        ROS_WARN_STREAM("Merged Predicted ROI Data size: "<<res.full_predicted_point_cloud.roi_data.size());
-        std::vector<shape_completion_bridge_msgs::RoiData>::iterator result;
-        result = std::max_element(res.full_predicted_point_cloud.roi_data.begin(), res.full_predicted_point_cloud.roi_data.end(), abs_compare);
-        // auto max_roi = std::max(res.full_predicted_point_cloud.roi_data.begin(), res.full_predicted_point_cloud.roi_data.end(), abs_compare);
-         ROS_WARN_STREAM("Max ROI Probability value: "<<(*result).roi_probability);
+//         ROS_WARN_STREAM("Merged Predicted pointcloud size: "<<res.full_predicted_point_cloud.point_cloud.data.size());
+//         ROS_WARN_STREAM("Merged Predicted ROI Data size: "<<res.full_predicted_point_cloud.roi_data.size());
+//         std::vector<shape_completion_bridge_msgs::RoiData>::iterator result;
+//         result = std::max_element(res.full_predicted_point_cloud.roi_data.begin(), res.full_predicted_point_cloud.roi_data.end(), abs_compare);
+//         // auto max_roi = std::max(res.full_predicted_point_cloud.roi_data.begin(), res.full_predicted_point_cloud.roi_data.end(), abs_compare);
+//          ROS_WARN_STREAM("Max ROI Probability value: "<<(*result).roi_probability);
 
-        if(publish_pointclouds_)
-        {
-            pc_ros_missing_surf_.reset(new sensor_msgs::PointCloud2());
-            *pc_ros_missing_surf_ = res.full_predicted_point_cloud.point_cloud;
-            pc_ros_missing_surf_->header = pc_obs_pcl_tf_ros_header_;
-        }
-        ROS_WARN("After publish_pointclouds_");
-        res.result_code = 0;
+//         if(publish_pointclouds_)
+//         {
+//             pc_ros_missing_surf_.reset(new sensor_msgs::PointCloud2());
+//             *pc_ros_missing_surf_ = res.full_predicted_point_cloud.point_cloud;
+//             pc_ros_missing_surf_->header = pc_obs_pcl_tf_ros_header_;
+//         }
+//         ROS_WARN("After publish_pointclouds_");
+//         res.result_code = 0;
 
-    }
-    else
-    {
-        ROS_WARN("Shape Completion Failure");
-    }
-    return true;
+//     }
+//     else
+//     {
+//         ROS_WARN("Shape Completion Failure");
+//     }
+//     return true;
 
-}
+// }
 
 void ShapeCompletionService::storeShapeCompletorResult(std::vector<ShapeCompletorResult>& src)
 {
@@ -211,17 +212,11 @@ void ShapeCompletionService::timerSuperellipsoidFitterCallback(const ros::TimerE
     pub_superellipsoids_.publish(sea);
 }
 
-// bool ShapeCompletionService::processEvaluateShapesServiceCallback(shape_completion_bridge_msgs::EvaluateShapes::Request& req, shape_completion_bridge_msgs::EvaluateShapes::Response& res)
-// {
-//     if(shape_completor_result_available_ == false)
-//     {
-//         ROS_ERROR("Shape Completor Result not available yet. Hence cannot evaluate shapes");
-//         return false; 
-//     }
+bool ShapeCompletionService::processGetActivePredictedShapesServiceCallback(shape_completion_bridge_msgs::GetActivePredictedShapes::Request& req, shape_completion_bridge_msgs::GetActivePredictedShapes::Response& res)
+{
 
+}
 
-
-// }
 
 
 

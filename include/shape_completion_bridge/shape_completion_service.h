@@ -15,6 +15,8 @@
 #include <pcl/kdtree/impl/kdtree_flann.hpp>
 #include <pcl/kdtree/io.h>
 #include <shape_completion_bridge_msgs/CompleteShapes.h>
+#include <shape_completion_bridge_msgs/GetActivePredictedShapes.h>
+
 
 #include "shape_completion_bridge/clustering.h"
 #include "shape_completion_bridge/shape_completor.h"
@@ -30,6 +32,8 @@ public:
     //ShapeCompletionService(ros::NodeHandle& nh, ros::NodeHandle& nhp);
 
     bool processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res);
+    bool processGetActivePredictedShapesServiceCallback(shape_completion_bridge_msgs::GetActivePredictedShapes::Request& req, shape_completion_bridge_msgs::GetActivePredictedShapes::Response& res);
+
     // bool processEvaluateShapesServiceCallback(shape_completion_bridge_msgs::EvaluateShapes::Request& req, shape_completion_bridge_msgs::EvaluateShapes::Response& res);
 
     void timerCallback(const ros::TimerEvent& event);
@@ -46,7 +50,7 @@ private:
     sensor_msgs::PointCloud2Ptr pc_ros_surf_, pc_ros_vol_, pc_ros_missing_surf_;
     bool publish_pointclouds_;
 
-    ros::ServiceServer service_shape_completion_;
+    ros::ServiceServer service_shape_completion_, service_get_active_predicted_shapes_;
 
     std::string p_world_frame_;
     std::unique_ptr<tf::TransformListener> listener_;

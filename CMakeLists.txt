@@ -86,7 +86,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 add_executable(shape_completion_node nodes/shape_completion_service_node.cpp src/shape_completion_bridge/shape_completion_service.cpp
-src/shape_completion_bridge/shape_completor.cpp)
+src/shape_completion_bridge/shape_completor.cpp src/shape_completion_bridge/shape_tracker.cpp)
 add_dependencies(shape_completion_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
