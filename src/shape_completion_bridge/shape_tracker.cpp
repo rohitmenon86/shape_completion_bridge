@@ -25,10 +25,11 @@ bool ShapeTracker::isShapeEqual(const ObservedShape& current, const ObservedShap
     
     return true;
 }
-void ShapeTracker::compareAllObservedShapesByShapeParams()
+
+std::vector<size_t> ShapeTracker::getChangedObservedShapesIndices()
 {
+    changed_observed_shapes_indices_current_.clear();
     std::vector<size_t> equal_indices_in_previous;
-    std::vector<size_t> new_shapes_in_current;
     for(size_t i = 0; i < all_observed_shapes_current_.size(); ++i)
     {
         bool match_not_found = true;
@@ -44,8 +45,18 @@ void ShapeTracker::compareAllObservedShapesByShapeParams()
         }
         if(match_not_found)
         {
-            new_shapes_in_current.push_back(i);
+            changed_observed_shapes_indices_current_.push_back(i);
         }
+    }
+    return changed_observed_shapes_indices_current_;
+}
+
+std::vector<ObservedShape> ShapeTracker::getChangedObservedShapes()
+{
+    std::vector<ObservedShape> changed_observed_shapes;
+    for(size_t i = 0; i < changed_observed_shapes_indices_current_.size(); ++i)
+    {
+        changed_observed_shapes.push_back(all_observed_shapes_current_[changed_observed_shapes_indices_current_[i]]);
     }
 }
 

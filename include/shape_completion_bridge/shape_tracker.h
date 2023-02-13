@@ -61,7 +61,10 @@ inline void setCurrentObservedShapes(const std::vector<ObservedShape>& all_obser
     all_observed_shapes_current_.assign(all_observed_shapes.begin(),all_observed_shapes.end());
 }
 
-void compareAllObservedShapesByShapeParams();
+std::vector<size_t> getChangedObservedShapesIndices();
+
+std::vector<ObservedShape> getChangedObservedShapes();
+
 
 bool isShapeEqual(const ObservedShape& current, const ObservedShape& previous);
 
@@ -79,6 +82,8 @@ private:
 
 std::vector<ObservedShape> all_observed_shapes_current_;
 std::vector<ObservedShape> all_observed_shapes_previous_;
+
+std::vector<size_t> changed_observed_shapes_indices_current_;
 
 std::vector<size_t> active_observed_shapes_current_;
 std::vector<size_t> active_observed_shapes_previous_;
