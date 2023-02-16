@@ -53,6 +53,8 @@
   <depend>shape_completion_bridge_msgs</depend>
   <depend>superellipsoid_msgs</depend>
   <exec_depend>capsicum_superellipsoid_detector</exec_depend>
+  <exec_depend>vpp_msgs</exec_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

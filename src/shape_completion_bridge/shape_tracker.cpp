@@ -3,21 +3,27 @@
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 
+std::mutex mtx_vpp;           // mutex for critical section
+
 namespace shape_completion_bridge
 {
 
-ShapeTracker::ShapeTracker()
+ShapeTracker::ShapeTracker():nhp_("~")
 {
     all_observed_shapes_current_.clear();
     all_observed_shapes_previous_.clear();
     active_observed_shapes_current_.clear();
     active_observed_shapes_previous_.clear();
+
+    timer_get_instance_pointclouds_ = nhp_.createTimer(ros::Duration(1.0), &ShapeTracker::timerGetInstancePointclouds, this);
+    client_get_instance_pointclouds_ = nh_.serviceClient<vpp_msgs::GetListInstancePointclouds>("gsm_node/get_list_instance_pointclouds");
+    pub_integrated_cloud_ = nhp_.advertise<sensor_msgs::PointCloud2>("integrated_cloud", 2, true);
 }
 
-bool ShapeTracker::isShapeEqual(const ObservedShape& current, const ObservedShape& previous)
+bool ShapeTracker::isShapeEqual(const ObservedShapeInstance& current, const ObservedShapeInstance& previous)
 {
 
-    if ((calcPositionDiff(current.pose.position, previous.pose.position) > shape_tracker_params_.param_position_diff_threshold))
+    if ((calcPositionDiff(current.centroid, previous.centroid) > shape_tracker_params_.param_position_diff_threshold))
         return false;
 
     if(fabs(current.num_points - previous.num_points) > shape_tracker_params_.param_size_diff_threshold)
@@ -51,13 +57,46 @@ std::vector<size_t> ShapeTracker::getChangedObservedShapesIndices()
     return changed_observed_shapes_indices_current_;
 }
 
-std::vector<ObservedShape> ShapeTracker::getChangedObservedShapes()
+std::vector<ObservedShapeInstance> ShapeTracker::getChangedObservedShapes()
 {
-    std::vector<ObservedShape> changed_observed_shapes;
+    std::vector<ObservedShapeInstance> changed_observed_shapes;
     for(size_t i = 0; i < changed_observed_shapes_indices_current_.size(); ++i)
     {
         changed_observed_shapes.push_back(all_observed_shapes_current_[changed_observed_shapes_indices_current_[i]]);
     }
+    return changed_observed_shapes;
+}
+
+void ShapeTracker::timerGetInstancePointclouds(const ros::TimerEvent& event)
+{
+    vpp_msgs::GetListInstancePointclouds srv;
+    srv.request.get_specific_instances = false;
+    if(client_get_instance_pointclouds_.call(srv))
+    {
+        setCurrentObservedShapes(srv.response.instance_clouds_with_centroid);
+        pub_integrated_cloud_.publish(srv.response.integrated_cloud);
+    }
+    
+}
+
+void ShapeTracker::setCurrentObservedShapes(const std::vector<ObservedShapeInstance>& all_observed_shapes)
+{
+    mtx_vpp.lock();
+    all_observed_shapes_previous_.clear();
+    all_observed_shapes_previous_.assign(all_observed_shapes_current_.begin(),all_observed_shapes_current_.end());
+    all_observed_shapes_current_.clear();
+    all_observed_shapes_current_.assign(all_observed_shapes.begin(),all_observed_shapes.end());
+    observed_shapes_available_ = true;
+    mtx_vpp.unlock();
+}
+
+std::vector<ObservedShapeInstance> ShapeTracker::getObservedShapes()
+{
+    mtx_vpp.lock();
+    std::vector<ObservedShapeInstance> res = all_observed_shapes_current_;
+    //shape_completor_result_.clear();
+    mtx_vpp.unlock();
+    return res;
 }
 
 }//end of namespace shape_completion_bridge

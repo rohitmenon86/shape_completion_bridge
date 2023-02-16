@@ -14,21 +14,26 @@
 #include <pcl/kdtree/impl/kdtree_flann.hpp>
 #include <pcl/kdtree/io.h>
 #include <pcl/common/distances.h>
+#include <vpp_msgs/InstancePointcloudwithCentroid.h>
+#include <vpp_msgs/GetListInstancePointclouds.h>
+#include <capsicum_superellipsoid_detector/se_detector.h>
+
 
 namespace shape_completion_bridge{
 
-struct ObservedShape
-{
-    size_t instance_id;
-    unsigned int num_points;
-    sensor_msgs::PointCloud2 pointcloud;
-    geometry_msgs::Pose pose;
-};
+typedef vpp_msgs::InstancePointcloudwithCentroid ObservedShapeInstance;
+// struct ObservedShape
+// {
+//     size_t instance_id;
+//     unsigned int num_points;
+//     sensor_msgs::PointCloud2 pointcloud;
+//     geometry_msgs::Pose pose;
+// };
 
 struct ShapeTrackerParams
 {
     double param_position_diff_threshold = 0.1;
-    unsigned param_size_diff_threshold = 10;
+    unsigned param_size_diff_threshold = 20;
     double param_nearness_threshold = 0.3;
     bool use_nearness = true;
 };
@@ -49,24 +54,18 @@ public:
 
 ShapeTracker();
 
-std::vector<ObservedShape> getNearestObservedShapes(double dist_threshold = 0, size_t num_shapes= 10);
-std::vector<ObservedShape> getChangedObservedShapes(size_t num_shapes= 10);
-std::vector<ObservedShape> getActiveObservedShapes(size_t num_shapes= 0);
+std::vector<ObservedShapeInstance> getNearestObservedShapes(double dist_threshold = 0, size_t num_shapes= 10);
+std::vector<ObservedShapeInstance> getChangedObservedShapes();
+std::vector<ObservedShapeInstance> getActiveObservedShapes(size_t num_shapes= 0);
 
-inline void setCurrentObservedShapes(const std::vector<ObservedShape>& all_observed_shapes)
-{
-    all_observed_shapes_previous_.clear();
-    all_observed_shapes_previous_.assign(all_observed_shapes_current_.begin(),all_observed_shapes_current_.end());
-    all_observed_shapes_current_.clear();
-    all_observed_shapes_current_.assign(all_observed_shapes.begin(),all_observed_shapes.end());
-}
+void timerGetInstancePointclouds(const ros::TimerEvent& event);
+
+
+void setCurrentObservedShapes(const std::vector<ObservedShapeInstance>& all_observed_shapes);
 
 std::vector<size_t> getChangedObservedShapesIndices();
 
-std::vector<ObservedShape> getChangedObservedShapes();
-
-
-bool isShapeEqual(const ObservedShape& current, const ObservedShape& previous);
+bool isShapeEqual(const ObservedShapeInstance& current, const ObservedShapeInstance& previous);
 
 inline double calcPositionDiff(const geometry_msgs::Point& a, const geometry_msgs::Point& b)
 {
@@ -78,10 +77,25 @@ inline double calcPositionDiff(const geometry_msgs::Point& a, const geometry_msg
     return (fabs(diff.x) + fabs(diff.y) + fabs(diff.z));
 }
 
+inline bool stopTimerGetInstancePointclouds()
+{
+    timer_get_instance_pointclouds_.stop();
+    return true;
+}
+
+inline bool startTimerGetInstancePointclouds()
+{
+    timer_get_instance_pointclouds_.start();
+    return true;
+}
+
 private:
 
-std::vector<ObservedShape> all_observed_shapes_current_;
-std::vector<ObservedShape> all_observed_shapes_previous_;
+ros::NodeHandle nh_;
+ros::NodeHandle nhp_;
+
+std::vector<ObservedShapeInstance> all_observed_shapes_current_;
+std::vector<ObservedShapeInstance> all_observed_shapes_previous_;
 
 std::vector<size_t> changed_observed_shapes_indices_current_;
 
@@ -89,6 +103,15 @@ std::vector<size_t> active_observed_shapes_current_;
 std::vector<size_t> active_observed_shapes_previous_;
 
 ShapeTrackerParams shape_tracker_params_;
+
+std::vector<ObservedShapeInstance> getObservedShapes();
+
+bool observed_shapes_available_ = false; 
+
+ros::ServiceClient client_get_instance_pointclouds_;
+ros::Publisher pub_integrated_cloud_;
+
+ros::Timer timer_get_instance_pointclouds_;
 
 
 };

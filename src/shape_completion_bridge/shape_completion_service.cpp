@@ -22,7 +22,7 @@ ShapeCompletionService::ShapeCompletionService():nhp_("~")
 
     //service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
     //service_shape_evaluation_ = nhp_.advertiseService("shape_evaluation_service", &ShapeCompletionService::processEvaluateShapesServiceCallback, this);
-    service_get_active_predicted_shapes_ = nhp_.advertiseService("get_active_predicted_shapes", &ShapeCompletionService::processGetActivePredictedShapesServiceCallback, this);
+    service_get_active_predicted_shapes_ = nhp_.advertiseService("get_active_predicted_shapes", &ShapeCompletionService::processGetActiveMissingShapesServiceCallback, this);
 
     last_shape_completion_method_ = 0;
     p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
@@ -212,9 +212,26 @@ void ShapeCompletionService::timerSuperellipsoidFitterCallback(const ros::TimerE
     pub_superellipsoids_.publish(sea);
 }
 
-bool ShapeCompletionService::processGetActivePredictedShapesServiceCallback(shape_completion_bridge_msgs::GetActivePredictedShapes::Request& req, shape_completion_bridge_msgs::GetActivePredictedShapes::Response& res)
+bool ShapeCompletionService::processGetActiveMissingShapesServiceCallback(shape_completion_bridge_msgs::GetActiveMissingShapes::Request& req, shape_completion_bridge_msgs::GetActiveMissingShapes::Response& res)
 {
-
+    shape_tracker_.stopTimerGetInstancePointclouds();
+    auto changed_observed_shapes = shape_tracker_.getChangedObservedShapes(); 
+    for(size_t i = 0; i < changed_observed_shapes.size(); ++i)
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr observed_shape;
+        pcl::fromROSMsg(changed_observed_shapes[i].pointcloud, *observed_shape);
+        std::shared_ptr<superellipsoid::Superellipsoid<pcl::PointXYZRGB>> superellipsoid_ptr;
+        std::vector<superellipsoid::CompletedShapeData> completed_shape_data_list;
+        if(se_detector_.fitSuperellipsoid(observed_shape, superellipsoid_ptr))
+        {
+            superellipsoid::SuperellipsoidResult<pcl::PointNormal> result = se_detector_.computeSuperellipsoidResult<pcl::PointNormal>(superellipsoid_ptr, observed_shape);
+            superellipsoid::CompletedShapeData completed_shape_data;
+            //superellipsoid::fromSuperellipsoidResult2CompletedShapeData<pcl::PointNormal>(result, completed_shape_data);
+            //res.active_missing_shapes.push_back(completed_shape_data.missing_shape);
+        }
+    }
+    return true;
+    
 }
 
 

@@ -15,12 +15,14 @@
 #include <pcl/kdtree/impl/kdtree_flann.hpp>
 #include <pcl/kdtree/io.h>
 #include <shape_completion_bridge_msgs/CompleteShapes.h>
-#include <shape_completion_bridge_msgs/GetActivePredictedShapes.h>
+#include <shape_completion_bridge_msgs/GetActiveMissingShapes.h>
 
 
 #include "shape_completion_bridge/clustering.h"
 #include "shape_completion_bridge/shape_completor.h"
 #include "shape_completion_bridge/superellipsoid_volume.h"
+#include <shape_completion_bridge/shape_tracker.h>
+
 
 namespace shape_completion_bridge
 {
@@ -32,19 +34,18 @@ public:
     //ShapeCompletionService(ros::NodeHandle& nh, ros::NodeHandle& nhp);
 
     bool processCompleteShapesServiceCallback(shape_completion_bridge_msgs::CompleteShapes::Request& req, shape_completion_bridge_msgs::CompleteShapes::Response& res);
-    bool processGetActivePredictedShapesServiceCallback(shape_completion_bridge_msgs::GetActivePredictedShapes::Request& req, shape_completion_bridge_msgs::GetActivePredictedShapes::Response& res);
+    bool processGetActiveMissingShapesServiceCallback(shape_completion_bridge_msgs::GetActiveMissingShapes::Request& req, shape_completion_bridge_msgs::GetActiveMissingShapes::Response& res);
 
     // bool processEvaluateShapesServiceCallback(shape_completion_bridge_msgs::EvaluateShapes::Request& req, shape_completion_bridge_msgs::EvaluateShapes::Response& res);
 
     void timerCallback(const ros::TimerEvent& event);
     void timerSuperellipsoidFitterCallback(const ros::TimerEvent& event);
 
-
 private:
     ros::NodeHandle nh_;
     ros::NodeHandle nhp_;
 
-    ros::Timer timer_publisher_, timer_sefitter_;
+    ros::Timer timer_publisher_, timer_sefitter_, timer_get_instance_pointclouds_;
     
     ros::Publisher pub_surface_, pub_volume_, pub_missing_surface_, pub_missing_surface_cluster_centres_;
     sensor_msgs::PointCloud2Ptr pc_ros_surf_, pc_ros_vol_, pc_ros_missing_surf_;
@@ -71,12 +72,15 @@ private:
     void storeShapeCompletorResult(std::vector<ShapeCompletorResult>& src);
     std::vector<ShapeCompletorResult> getShapeCompletorResult();
 
-
     int p_min_cluster_size, p_max_cluster_size, p_max_num_iterations, p_cost_type, p_missing_surfaces_num_samples;
     double p_cluster_tolerance, p_estimate_normals_search_radius, p_estimate_cluster_center_regularization, p_pointcloud_volume_resolution, p_octree_volume_resolution, p_prior_scaling, p_prior_center, p_missing_surfaces_threshold;
     bool p_print_ceres_summary, p_use_fibonacci_sphere_projection_sampling;
     std::string p_world_frame;
     ros::Publisher pub_superellipsoids_;
+
+    ShapeTracker shape_tracker_; 
+    superellipsoid::SuperellipsoidDetector se_detector_;
+
 };
 
 }
