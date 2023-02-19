@@ -15,6 +15,7 @@
 #include <pcl/kdtree/io.h>
 #include <pcl/common/distances.h>
 #include <vpp_msgs/InstancePointcloudwithCentroid.h>
+#include <vpp_msgs/InstancePointcloudwithCentroidArray.h>
 #include <vpp_msgs/GetListInstancePointclouds.h>
 #include <capsicum_superellipsoid_detector/se_detector.h>
 
@@ -89,6 +90,11 @@ inline bool startTimerGetInstancePointclouds()
     return true;
 }
 
+void callbackInstancePointclouds(const vpp_msgs::InstancePointcloudwithCentroidArray& list_instance_clouds);
+
+
+std::vector<ObservedShapeInstance> getObservedShapes();
+
 private:
 
 ros::NodeHandle nh_;
@@ -104,13 +110,12 @@ std::vector<size_t> active_observed_shapes_previous_;
 
 ShapeTrackerParams shape_tracker_params_;
 
-std::vector<ObservedShapeInstance> getObservedShapes();
-
 bool observed_shapes_available_ = false; 
 
 ros::ServiceClient client_get_instance_pointclouds_;
 ros::Publisher pub_integrated_cloud_;
 
+ros::Subscriber sub_list_instance_clouds_;
 ros::Timer timer_get_instance_pointclouds_;
 
 

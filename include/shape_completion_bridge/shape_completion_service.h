@@ -81,6 +81,15 @@ private:
     ShapeTracker shape_tracker_; 
     superellipsoid::SuperellipsoidDetector se_detector_;
 
+    std::vector<superellipsoid::CompletedShapeData> current_completed_shape_data_;
+    bool completed_shape_data_available_ = false;
+
+    void storeCompletedShapeData(std::vector<superellipsoid::CompletedShapeData>& src);
+
+    std::vector<superellipsoid::CompletedShapeData> getCompletedShapeData();
+
+
+
 };
 
 }

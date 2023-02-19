@@ -15,9 +15,11 @@ ShapeTracker::ShapeTracker():nhp_("~")
     active_observed_shapes_current_.clear();
     active_observed_shapes_previous_.clear();
 
-    timer_get_instance_pointclouds_ = nhp_.createTimer(ros::Duration(1.0), &ShapeTracker::timerGetInstancePointclouds, this);
-    client_get_instance_pointclouds_ = nh_.serviceClient<vpp_msgs::GetListInstancePointclouds>("gsm_node/get_list_instance_pointclouds");
+    //timer_get_instance_pointclouds_ = nhp_.createTimer(ros::Duration(2.0), &ShapeTracker::timerGetInstancePointclouds, this);
+    client_get_instance_pointclouds_ = nh_.serviceClient<vpp_msgs::GetListInstancePointclouds>("/gsm_node/get_list_instance_pointclouds");
     pub_integrated_cloud_ = nhp_.advertise<sensor_msgs::PointCloud2>("integrated_cloud", 2, true);
+    sub_list_instance_clouds_ = nh_.subscribe("/gsm_node/list_instance_pointclouds", 1, &ShapeTracker::callbackInstancePointclouds, this);
+
 }
 
 bool ShapeTracker::isShapeEqual(const ObservedShapeInstance& current, const ObservedShapeInstance& previous)
@@ -69,14 +71,22 @@ std::vector<ObservedShapeInstance> ShapeTracker::getChangedObservedShapes()
 
 void ShapeTracker::timerGetInstancePointclouds(const ros::TimerEvent& event)
 {
+    ROS_INFO("timerGetInstancePointclouds");
     vpp_msgs::GetListInstancePointclouds srv;
     srv.request.get_specific_instances = false;
     if(client_get_instance_pointclouds_.call(srv))
     {
+        ROS_INFO("Get Instance PC call successful");
         setCurrentObservedShapes(srv.response.instance_clouds_with_centroid);
         pub_integrated_cloud_.publish(srv.response.integrated_cloud);
+        return;
     }
-    
+    ROS_INFO("Get Instance PC call failure");
+}
+
+void ShapeTracker::callbackInstancePointclouds(const vpp_msgs::InstancePointcloudwithCentroidArray& list_instance_clouds)
+{
+    setCurrentObservedShapes(list_instance_clouds.instance_clouds_with_centroid);
 }
 
 void ShapeTracker::setCurrentObservedShapes(const std::vector<ObservedShapeInstance>& all_observed_shapes)

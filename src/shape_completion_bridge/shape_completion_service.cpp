@@ -17,12 +17,12 @@ ShapeCompletionService::ShapeCompletionService():nhp_("~")
     pub_missing_surface_ = nhp_.advertise<sensor_msgs::PointCloud2>("missing_surface_cloud", 2, true);
     pub_superellipsoids_ = nhp_.advertise<superellipsoid_msgs::SuperellipsoidArray>("superellipsoids", 2, true);
 
-    timer_publisher_ = nhp_.createTimer(ros::Duration(1.0), &ShapeCompletionService::timerCallback, this);
-    timer_sefitter_ = nhp_.createTimer(ros::Duration(5.0), &ShapeCompletionService::timerSuperellipsoidFitterCallback, this);
+    timer_publisher_ = nhp_.createTimer(ros::Duration(5.0), &ShapeCompletionService::timerCallback, this);
+    //timer_sefitter_ = nhp_.createTimer(ros::Duration(5.0), &ShapeCompletionService::timerSuperellipsoidFitterCallback, this);
 
     //service_shape_completion_ = nhp_.advertiseService("shape_completion_service", &ShapeCompletionService::processCompleteShapesServiceCallback, this);
     //service_shape_evaluation_ = nhp_.advertiseService("shape_evaluation_service", &ShapeCompletionService::processEvaluateShapesServiceCallback, this);
-    service_get_active_predicted_shapes_ = nhp_.advertiseService("get_active_predicted_shapes", &ShapeCompletionService::processGetActiveMissingShapesServiceCallback, this);
+    service_get_active_predicted_shapes_ = nhp_.advertiseService("get_active_missing_shapes", &ShapeCompletionService::processGetActiveMissingShapesServiceCallback, this);
 
     last_shape_completion_method_ = 0;
     p_shape_completor_ = std::make_unique<SuperellipsoidFitter>(nh_, nhp_);
@@ -141,10 +141,72 @@ std::vector<ShapeCompletorResult> ShapeCompletionService::getShapeCompletorResul
     return res;
 }
 
+void ShapeCompletionService::storeCompletedShapeData(std::vector<superellipsoid::CompletedShapeData>& src)
+{
+    mtx.lock();
+    current_completed_shape_data_.clear();
+    current_completed_shape_data_ = src;
+    completed_shape_data_available_ = true;
+    mtx.unlock();
+}
+
+std::vector<superellipsoid::CompletedShapeData> ShapeCompletionService::getCompletedShapeData()
+{
+    mtx.lock();
+    std::vector<superellipsoid::CompletedShapeData> res = current_completed_shape_data_;
+    //shape_completor_result_.clear();
+    mtx.unlock();
+    return res;
+}
+
 void ShapeCompletionService::timerCallback(const ros::TimerEvent& event)
 {
-    if(pc_ros_missing_surf_ != NULL)
-        pub_missing_surface_.publish(pc_ros_missing_surf_);
+    auto changed_observed_shapes = shape_tracker_.getObservedShapes(); 
+    if(changed_observed_shapes.empty())
+    {
+        ROS_ERROR("No observed shapes");
+        //shape_tracker_.startTimerGetInstancePointclouds();
+        return;
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr integrated_missing_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    bool valid_res = false;
+    std::vector<superellipsoid::CompletedShapeData> completed_shape_data_list;
+    for(size_t i = 0; i < changed_observed_shapes.size(); ++i)
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr observed_shape(new pcl::PointCloud<pcl::PointXYZRGB>);
+        pcl::fromROSMsg(changed_observed_shapes[i].pointcloud, *observed_shape);
+        std::shared_ptr<std::vector<int>> indices(new std::vector<int>);
+        pcl::removeNaNFromPointCloud(*observed_shape, *observed_shape, *indices);
+        if(observed_shape->size() == 0)
+        {
+            ROS_WARN("Observed Shape empty");
+            continue;
+        }
+        std::shared_ptr<superellipsoid::Superellipsoid<pcl::PointXYZRGB>> superellipsoid_ptr;
+        if(se_detector_.fitSuperellipsoid(observed_shape, superellipsoid_ptr))
+        {
+            valid_res = true;
+            ROS_DEBUG("SE fitting successful");
+
+            ROS_DEBUG("Before computeSuperellipsoidResult");
+            superellipsoid::SuperellipsoidResult<pcl::PointXYZ> result = se_detector_.computeSuperellipsoidResult<pcl::PointXYZ>(superellipsoid_ptr, observed_shape);
+            ROS_DEBUG("After computeSuperellipsoidResult");
+            superellipsoid::CompletedShapeData completed_shape_data;
+            superellipsoid::fromSuperellipsoidResult2CompletedShapeData<pcl::PointXYZ>(result, completed_shape_data);            
+            *integrated_missing_cloud += *result.missing_surface;
+            completed_shape_data_list.push_back(completed_shape_data);
+        }
+    }
+    if(valid_res)
+    {   ROS_WARN_STREAM("*********No of completed shape data: "<<completed_shape_data_list.size());
+        storeCompletedShapeData(completed_shape_data_list);
+        sensor_msgs::PointCloud2 pcl2_msg;
+        pcl::toROSMsg(*integrated_missing_cloud, pcl2_msg);
+        pcl2_msg.header.stamp = ros::Time::now();
+        pcl2_msg.header.frame_id = "world";   
+        pub_missing_surface_.publish(pcl2_msg);
+    }
+
 }
 
 bool ShapeCompletionService::readPointCloudFromTopic()
@@ -214,22 +276,70 @@ void ShapeCompletionService::timerSuperellipsoidFitterCallback(const ros::TimerE
 
 bool ShapeCompletionService::processGetActiveMissingShapesServiceCallback(shape_completion_bridge_msgs::GetActiveMissingShapes::Request& req, shape_completion_bridge_msgs::GetActiveMissingShapes::Response& res)
 {
-    shape_tracker_.stopTimerGetInstancePointclouds();
-    auto changed_observed_shapes = shape_tracker_.getChangedObservedShapes(); 
-    for(size_t i = 0; i < changed_observed_shapes.size(); ++i)
+    ROS_WARN("**********************Service GetActiveMissingShapes START*******************");
+    //shape_tracker_.stopTimerGetInstancePointclouds();
+    res.result_code = -1;
+
+    if(completed_shape_data_available_)
     {
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr observed_shape;
-        pcl::fromROSMsg(changed_observed_shapes[i].pointcloud, *observed_shape);
-        std::shared_ptr<superellipsoid::Superellipsoid<pcl::PointXYZRGB>> superellipsoid_ptr;
-        std::vector<superellipsoid::CompletedShapeData> completed_shape_data_list;
-        if(se_detector_.fitSuperellipsoid(observed_shape, superellipsoid_ptr))
+        auto curr_shape_data_vec = getCompletedShapeData();
+        ROS_INFO_STREAM("No of completed shapes: "<<curr_shape_data_vec.size());
+        for(const auto& curr_shape: curr_shape_data_vec)
         {
-            superellipsoid::SuperellipsoidResult<pcl::PointNormal> result = se_detector_.computeSuperellipsoidResult<pcl::PointNormal>(superellipsoid_ptr, observed_shape);
-            superellipsoid::CompletedShapeData completed_shape_data;
-            //superellipsoid::fromSuperellipsoidResult2CompletedShapeData<pcl::PointNormal>(result, completed_shape_data);
-            //res.active_missing_shapes.push_back(completed_shape_data.missing_shape);
+            ROS_INFO_STREAM("Num of missing points: "<<curr_shape.missing_shape.num_missing_points);
+            if(curr_shape.missing_shape.num_missing_points > 100)
+                res.active_missing_shapes.push_back(curr_shape.missing_shape);
         }
+        res.result_code = 0; 
     }
+    // if(changed_observed_shapes.empty())
+    // {
+    //     ROS_ERROR("No changed observed shapes");
+    //     //shape_tracker_.startTimerGetInstancePointclouds();
+    //     return false;
+    // }
+    // pcl::PointCloud<pcl::PointXYZ>::Ptr integrated_missing_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    // bool first_shape = true;
+    // for(size_t i = 0; i < changed_observed_shapes.size(); ++i)
+    // {
+    //     pcl::PointCloud<pcl::PointXYZRGB>::Ptr observed_shape(new pcl::PointCloud<pcl::PointXYZRGB>);
+    //     pcl::fromROSMsg(changed_observed_shapes[i].pointcloud, *observed_shape);
+    //     std::shared_ptr<std::vector<int>> indices(new std::vector<int>);
+    //     pcl::removeNaNFromPointCloud(*observed_shape, *observed_shape, *indices);
+    //     if(observed_shape->size() == 0)
+    //     {
+    //         ROS_WARN("Observed Shape empty");
+    //         continue;
+    //     }
+    //     std::shared_ptr<superellipsoid::Superellipsoid<pcl::PointXYZRGB>> superellipsoid_ptr;
+    //     std::vector<superellipsoid::CompletedShapeData> completed_shape_data_list;
+    //     if(se_detector_.fitSuperellipsoid(observed_shape, superellipsoid_ptr))
+    //     {
+    //         ROS_INFO("SE fitting successful");
+
+    //         res.result_code = 0;
+    //         ROS_INFO("Before computeSuperellipsoidResult");
+    //         superellipsoid::SuperellipsoidResult<pcl::PointXYZ> result = se_detector_.computeSuperellipsoidResult<pcl::PointXYZ>(superellipsoid_ptr, observed_shape);
+    //         ROS_INFO("After computeSuperellipsoidResult");
+    //         superellipsoid::CompletedShapeData completed_shape_data;
+    //         superellipsoid::fromSuperellipsoidResult2CompletedShapeData<pcl::PointXYZ>(result, completed_shape_data);
+    //         res.active_missing_shapes.push_back(completed_shape_data.missing_shape);
+            
+    //         *integrated_missing_cloud += *result.missing_surface;
+    //     }
+    //     if(res.result_code  > -1)
+    //     {   
+    //         sensor_msgs::PointCloud2 pcl2_msg;
+    //         pcl::toROSMsg(*integrated_missing_cloud, pcl2_msg);
+    //         pcl2_msg.header.stamp = ros::Time::now();
+    //         pcl2_msg.header.frame_id = "world";   
+    //         pub_missing_surface_.publish(pcl2_msg);
+    //     }
+
+    // }
+
+    //shape_tracker_.startTimerGetInstancePointclouds();
+    ROS_WARN("Service GetActiveMissingShapes END");
     return true;
     
 }
